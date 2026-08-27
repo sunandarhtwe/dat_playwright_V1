@@ -83,7 +83,7 @@ CustomerName=Yamada"></textarea>
 
     <div id="previewPanel" class="hidden" style="margin-top:8px">
       <div class="previewHead">
-        <div><strong>Updated Template Preview</strong> <span class="note">No / TestCaseID မှလွဲပြီး edit လုပ်နိုင်ပါတယ်။ ＋/－ ဖြင့် row ထည့်/ဖျက်၊ ▲/▼ ဖြင့် row အစီအစဉ်ပြောင်းနိုင်ပါတယ်။ Selector မှာ CSS (#id) သို့မဟုတ် XPath (//button[...] or xpath=...) ကို လက်ခံပါတယ်။</span></div>
+        <div><strong>Updated Template Preview</strong> <span class="note">No / TestCaseID မှလွဲပြီး edit လုပ်နိုင်ပါတယ်။ ＋/－ ဖြင့် row ထည့်/ဖျက်၊ ▲/▼ ဖြင့် row အစီအစဉ်ပြောင်းနိုင်ပါတယ်။ Selector: CSS (#id) / XPath (//button[...] or xpath=...) / name=value / id=value / link=LinkText ကို လက်ခံပါတယ်။ Event=selectFrame ဖြင့် iframe ထဲသို့ ဝင်နိုင်ပြီး Selector="top" (or default/main/parent) ဖြင့် ပင်မ page ကို ပြန်ရောက်နိုင်ပါတယ်။</span></div>
         <span class="status" id="previewStatus">Generated</span>
       </div>
       <div id="templateTabs" class="tabs"></div>
@@ -201,7 +201,7 @@ function renderPreview(){
 function editableCell(ti,ri,key,value){return `<td class="editable" contenteditable="true" oninput="updateCell(${ti},${ri},'${key}',this.innerText)">${esc(value)}</td>`;}
 function updateCell(ti,ri,key,val){previewData[ti].rows[ri][key]=val.replace(/\n/g,'').trim();generatedDirty=true;previewStatus.textContent='Edited - not saved yet';}
 
-const EVENT_OPTIONS=['goto','fill','type','click','waitForLoad','waitForSelector','waitForText','expectText','screenshot','wait','keyboardText','check'];
+const EVENT_OPTIONS=['goto','fill','type','click','selectFrame','waitForLoad','waitForSelector','waitForText','expectText','screenshot','wait','keyboardText','check'];
 function eventSelectCell(ti,ri,value){
   let opts=EVENT_OPTIONS.slice();
   const cur=String(value??'').trim();
