@@ -40,7 +40,7 @@ results/html-report/index.html
 | TestCaseID | Case ID and screenshot file name |
 | TestName | Test case name |
 | Event | goto, fill, type, click, selectFrame, waitForLoad, waitForSelector, waitForText, expectText, screenshot, wait, keyboardText, check |
-| Selector | CSS selector, XPath (raw `//...` is auto-detected, or `xpath=...`), `id=value`, `name=value`, or `link=LinkText` |
+| Selector | CSS selector, XPath (raw `//...` is auto-detected, or `xpath=...`), `id=value`, `name=value`, or `link=LinkText` (exact link text) |
 | Value | URL / input value / wait text |
 | ExpectedText | Expected text |
 | WaitMs | Wait timeout |
@@ -196,4 +196,24 @@ results/html-report/index.html
   - `name=value` — translated to `css=[name="value"]`.
   - `link=value` — exact link-text lookup, translated to `a >> text="value"`.
 - New `Event`: `selectFrame`. `Selector` identifies the `<iframe>` element (CSS, XPath, `name=`, or `id=`); every action after it (fill/click/etc.) runs inside that iframe. Set `Selector` (or `Value`) to `top` / `default` / `main` / `parent` to switch back to the main page. The selected frame automatically resets on the next `goto`.
-  - Known limitation: `Highlight=Y` screenshots are drawn against the top page and won't currently box an element that's inside a selected iframe.
+
+
+## v14.6 Updates
+- Fixed `link=value` not matching real links: it was translated to `a >> text="value"`, which only searches *inside descendants* of an `<a>` tag. A normal link (`<a>顧客検索</a>`, plain text with no nested element) has nothing there to match, so the wait for it to become visible always timed out. Now translated to `a:text-is("value")`, which correctly matches the `<a>` element itself by its own exact text.
+- Fixed a latent bug in the `Highlight=Y` screenshot box: it re-resolved the selector with a hand-written `document.querySelector` / XPath script inside the browser, which only understood plain CSS or `xpath=`. Any of the newer selector forms (`id=`, `name=`, `link=`, or anything using the `>>` chain syntax) would throw there. Highlighting now uses Playwright's own locator (`boundingBox()`) end-to-end, so it works correctly for every selector form the tool accepts.
+
+
+## v14.7 Updates
+- `selectFrame` now recognizes the classic Selenium IDE syntax `relative=top` / `relative=parent` (not just the bare words `top`/`default`/`main`/`parent`) as "switch back to the main page" — this is the exact syntax legacy recorded Selenium scripts use, and previously it was silently treated as a real (bogus) frame selector instead of a reset instruction.
+- `selectFrame` now resolves a frame by its `name` attribute (`name=menu`, or a raw `frame[name="menu"]` / `[name="menu"]` selector) using Playwright's `page.frame({ name })` API instead of only a selector-based `FrameLocator`. This is the reliable way to target a classic `<frame>` in an old `<frameset>` layout (not just a modern `<iframe>`), which is what many older banking/JSP systems still use. Non-name selectors (arbitrary CSS/XPath) still fall back to `FrameLocator` as before.
+
+
+## v14.8 Updates
+- `selectFrame` previously never failed, even when the frame wasn't actually found — a bad name or selector silently fell through, and the real problem only showed up two steps later as a generic "not visible" timeout on a completely unrelated click/fill row, with no indication the actual issue was frame selection.
+- `selectFrame` now polls for the named frame for up to `WaitMs` (default 10s), since a frame can attach to the page a moment after `goto`/`waitForLoad` returns. If it still isn't found, the row now fails immediately with a specific error naming the frame it looked for and listing every frame name actually present on the page at that moment — so a typo or a timing issue is obvious right away instead of hiding inside a later row's failure.
+- The selector-based `FrameLocator` fallback path (for non-`name=` selectors) is now verified the same way, using Playwright's `frameLocator.owner()`.
+
+
+## v14.9 Updates
+- Fixed the real cause of "selectFrame passes, but the very next click/fill inside that frame still times out as not visible": the `Highlight=Y` pre-click check always searched the **top page**, never the currently selected frame, regardless of a successful `selectFrame`. For any row with `Highlight=Y` whose element is inside a frame, this made the row fail before the actual click/fill action ever ran — with an error that looked identical to an ordinary "element not visible" problem, giving no hint the real issue was frame scoping.
+- Highlighting now searches in the same frame the row's action itself runs in, and correctly offsets the drawn red box by the frame's own position on the page (a coordinate inside a frame isn't the same as a coordinate on the top page).
