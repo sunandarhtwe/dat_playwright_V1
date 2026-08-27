@@ -79,22 +79,41 @@ async function clearHighlight(page) {
 // or xpath= (e.g. id=, name=, link=, or any ">> " chained selector) since those
 // aren't valid native DOM APIs -- Playwright's own engine already understands
 // all of them correctly.
-async function addHighlight(page, selector) {
+//
+// `root` is the same page/frame/frameLocator that the row's actual action runs
+// against (see runAction's `target`). Highlighting always used to search the
+// top page regardless of a selected frame, so any row with Highlight=Y whose
+// element lives inside a selectFrame'd frame would fail here -- before the
+// action itself ever ran -- with a plain "not visible" timeout that gave no
+// hint the real cause was frame scoping.
+async function addHighlight(page, root, selector) {
   if (!selector) return;
-  const loc = page.locator(selector).first();
+  const loc = root.locator(selector).first();
   await loc.waitFor({ state: 'visible', timeout: 10000 });
   await loc.scrollIntoViewIfNeeded();
   const box = await loc.boundingBox();
   if (!box) return;
-  await page.evaluate((b) => {
+
+  // boundingBox() is relative to root's own viewport. The highlight <div> is
+  // always injected into the top page's document (that's what gets
+  // screenshotted), so when root is a frame/frameLocator, add the position of
+  // its own <frame>/<iframe> element within the top page.
+  let offsetX = 0, offsetY = 0;
+  if (root !== page) {
+    const owner = typeof root.frameElement === 'function' ? await root.frameElement() : root.owner();
+    const ownerBox = owner ? await owner.boundingBox() : null;
+    if (ownerBox) { offsetX = ownerBox.x; offsetY = ownerBox.y; }
+  }
+
+  await page.evaluate(({ b, offsetX, offsetY }) => {
     const old = document.getElementById('__pw_red_highlight_box__');
     if (old) old.remove();
     const pad = 6;
     const el = document.createElement('div');
     el.id = '__pw_red_highlight_box__';
     el.style.position = 'absolute';
-    el.style.left = `${window.scrollX + b.x - pad}px`;
-    el.style.top = `${window.scrollY + b.y - pad}px`;
+    el.style.left = `${window.scrollX + b.x + offsetX - pad}px`;
+    el.style.top = `${window.scrollY + b.y + offsetY - pad}px`;
     el.style.width = `${b.width + pad * 3}px`;
     el.style.height = `${b.height + pad * 2}px`;
     el.style.border = '4px solid red';
@@ -104,7 +123,15 @@ async function addHighlight(page, selector) {
     el.style.zIndex = '2147483647';
     el.style.background = 'transparent';
     document.body.appendChild(el);
-  }, box);
+  }, { b: box, offsetX, offsetY });
+}
+
+// Resolves the same page/frame/frameLocator that runAction's `target` uses,
+// so a Highlight=Y row searches in the same scope the row's actual action runs in.
+function currentRoot(page, context) {
+  return (context && context.frame) ? context.frame
+    : (context && context.frameLocator) ? context.frameLocator
+    : page;
 }
 
 async function runTemplate(templatePath) {
@@ -137,7 +164,7 @@ async function runTemplate(templatePath) {
     try {
       await clearHighlight(page);
       if (highlightFlag === 'Y' || highlightFlag === 'YES') {
-        await addHighlight(page, resolveSelector(tc.Selector));
+        await addHighlight(page, currentRoot(page, context), resolveSelector(tc.Selector));
         if (screenshotFlag === 'Y' || screenshotFlag === 'YES') {
           screenshotPath = path.join(screenshotDir, `${testCaseId}.png`);
           await page.screenshot({ path: screenshotPath, fullPage: true });
@@ -168,7 +195,7 @@ async function runTemplate(templatePath) {
 
       try {
         if (highlightFlag === 'Y' || highlightFlag === 'YES') {
-          await addHighlight(page, resolveSelector(tc.Selector));
+          await addHighlight(page, currentRoot(page, context), resolveSelector(tc.Selector));
         }
       } catch {}
 
