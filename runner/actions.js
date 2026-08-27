@@ -5,14 +5,29 @@ function normalize(value) {
   return value === undefined || value === null ? '' : String(value).trim();
 }
 
-// Accepts plain CSS selectors as well as XPath. If the user already wrote an
-// engine prefix (xpath=, css=, text=, etc.) it is left untouched. If the value
-// looks like a raw XPath expression (starts with "/", "//" or "(") the
-// "xpath=" prefix is added automatically so Playwright's locator() resolves it.
+function escAttr(v) {
+  return String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+// Accepts plain CSS, XPath, and a few common Selenium-style locator prefixes:
+//   id=value    -> Playwright already has a built-in "id=" engine, left as-is
+//   name=value  -> translated to css=[name="value"]
+//   link=value  -> translated to an exact-text anchor lookup: a >> text="value"
+// Any other existing engine prefix Playwright already understands (css=, xpath=,
+// text=, data-testid=, data-test-id=, data-test=) is left untouched. If the value
+// looks like a raw XPath expression (starts with "/", "//", ".//" or "(") the
+// "xpath=" prefix is added automatically.
 function resolveSelector(value) {
   const s = normalize(value);
   if (!s) return s;
-  if (/^[a-z]+=/i.test(s)) return s;
+  const m = s.match(/^([A-Za-z][A-Za-z-]*)=([\s\S]*)$/);
+  if (m) {
+    const engine = m[1].toLowerCase();
+    const rest = m[2];
+    if (engine === 'name') return `css=[name="${escAttr(rest)}"]`;
+    if (engine === 'link') return `a >> text="${escAttr(rest)}"`;
+    return s; // id=, xpath=, css=, text=, data-testid=... already valid, pass through
+  }
   if (s.startsWith('/') || s.startsWith('(') || s.startsWith('.//')) return 'xpath=' + s;
   return s;
 }
@@ -23,39 +38,58 @@ async function runAction(page, tc, context) {
   const value = tc.Value === undefined || tc.Value === null ? '' : String(tc.Value);
   const expectedText = normalize(tc.ExpectedText);
   const waitMs = Number(tc.WaitMs || 0);
+  // Once a selectFrame action has run, subsequent element-based actions in this
+  // template (fill/click/etc.) operate inside that iframe instead of the top
+  // page, until selectFrame switches back to "top"/"default" or a new goto runs.
+  const target = (context && context.frameLocator) ? context.frameLocator : page;
 
   switch (event) {
     case 'goto':
+      if (context) context.frameLocator = null; // top-level navigation invalidates any selected frame
       await page.goto(value || selector, { waitUntil: 'domcontentloaded', timeout: 120000 });
       break;
 
+    case 'selectframe':
+      // Selector identifies the <iframe> element (css/xpath/name=/id=). Value or
+      // Selector of "top" / "default" / "main" / "parent" switches back to the
+      // main page for all following actions.
+      if (context) {
+        const target_ = (value || selector || '').toLowerCase();
+        if (!selector || ['top', 'default', 'main', 'parent'].includes(target_)) {
+          context.frameLocator = null;
+        } else {
+          context.frameLocator = page.frameLocator(selector);
+        }
+      }
+      break;
+
     case 'fill':
-      await page.locator(selector).fill(value);
+      await target.locator(selector).fill(value);
       break;
 
     case 'type':
-      await page.locator(selector).type(value, { delay: Number(tc.DelayMs || 50) });
+      await target.locator(selector).type(value, { delay: Number(tc.DelayMs || 50) });
       break;
 
     case 'click':
-      await page.locator(selector).click();
+      await target.locator(selector).click();
       break;
 
     case 'check':
-      await page.locator(selector).check();
+      await target.locator(selector).check();
       break;
 
     case 'uncheck':
-      await page.locator(selector).uncheck();
+      await target.locator(selector).uncheck();
       break;
 
     case 'select':
     case 'selectoption':
-      await page.locator(selector).selectOption(value);
+      await target.locator(selector).selectOption(value);
       break;
 
     case 'press':
-      await page.locator(selector).press(value);
+      await target.locator(selector).press(value);
       break;
 
     case 'wait':
@@ -70,19 +104,19 @@ async function runAction(page, tc, context) {
       break;
 
     case 'waitforselector':
-      await page.locator(selector).waitFor({ timeout: waitMs || 60000 });
+      await target.locator(selector).waitFor({ timeout: waitMs || 60000 });
       break;
 
     case 'waitfortext':
-      await page.getByText(value || expectedText, { exact: false }).waitFor({ timeout: waitMs || 60000 });
+      await target.getByText(value || expectedText, { exact: false }).waitFor({ timeout: waitMs || 60000 });
       break;
 
     case 'expecttext':
-      await page.getByText(expectedText || value, { exact: false }).waitFor({ timeout: waitMs || 60000 });
+      await target.getByText(expectedText || value, { exact: false }).waitFor({ timeout: waitMs || 60000 });
       break;
 
     case 'expectvisible':
-      await page.locator(selector).waitFor({ state: 'visible', timeout: waitMs || 60000 });
+      await target.locator(selector).waitFor({ state: 'visible', timeout: waitMs || 60000 });
       break;
 
     case 'screenshot':
@@ -93,7 +127,7 @@ async function runAction(page, tc, context) {
       // Click on visible software-keyboard buttons by their text.
       // Example Value: 111111 or test067040
       for (const ch of value.split('')) {
-        await page.getByText(ch, { exact: true }).click({ timeout: waitMs || 10000 });
+        await target.getByText(ch, { exact: true }).click({ timeout: waitMs || 10000 });
       }
       break;
 
@@ -101,7 +135,7 @@ async function runAction(page, tc, context) {
       // For special cases only. Example:
       // Selector: #cntrId
       // Value: test067040
-      await page.locator(selector).evaluate((el, v) => {
+      await target.locator(selector).evaluate((el, v) => {
         el.value = v;
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
