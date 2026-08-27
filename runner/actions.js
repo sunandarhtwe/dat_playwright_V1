@@ -12,7 +12,10 @@ function escAttr(v) {
 // Accepts plain CSS, XPath, and a few common Selenium-style locator prefixes:
 //   id=value    -> Playwright already has a built-in "id=" engine, left as-is
 //   name=value  -> translated to css=[name="value"]
-//   link=value  -> translated to an exact-text anchor lookup: a >> text="value"
+//   link=value  -> translated to an exact-text anchor lookup: a:text-is("value")
+//                  (":text-is" matches the element's own text, unlike "a >> text=..."
+//                  which only searches inside descendants of <a> and misses a plain
+//                  text node directly inside the link -- the normal case)
 // Any other existing engine prefix Playwright already understands (css=, xpath=,
 // text=, data-testid=, data-test-id=, data-test=) is left untouched. If the value
 // looks like a raw XPath expression (starts with "/", "//", ".//" or "(") the
@@ -25,7 +28,7 @@ function resolveSelector(value) {
     const engine = m[1].toLowerCase();
     const rest = m[2];
     if (engine === 'name') return `css=[name="${escAttr(rest)}"]`;
-    if (engine === 'link') return `a >> text="${escAttr(rest)}"`;
+    if (engine === 'link') return `a:text-is("${escAttr(rest)}")`;
     return s; // id=, xpath=, css=, text=, data-testid=... already valid, pass through
   }
   if (s.startsWith('/') || s.startsWith('(') || s.startsWith('.//')) return 'xpath=' + s;
