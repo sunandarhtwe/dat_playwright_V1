@@ -39,8 +39,8 @@ results/html-report/index.html
 | No | Display order number |
 | TestCaseID | Case ID and screenshot file name |
 | TestName | Test case name |
-| Event | goto, fill, type, click, waitForLoad, waitForSelector, waitForText, expectText, screenshot, wait, keyboardText, check |
-| Selector | CSS selector or XPath (raw `//...` is auto-detected, or use explicit `xpath=...`) |
+| Event | goto, fill, type, click, selectFrame, waitForLoad, waitForSelector, waitForText, expectText, screenshot, wait, keyboardText, check |
+| Selector | CSS selector, XPath (raw `//...` is auto-detected, or `xpath=...`), `id=value`, `name=value`, or `link=LinkText` |
 | Value | URL / input value / wait text |
 | ExpectedText | Expected text |
 | WaitMs | Wait timeout |
@@ -188,3 +188,12 @@ results/html-report/index.html
 - Fixed a separate Execute crash seen as `Assertion failed: process_title, file ...\deps\uv\src\win\util.c, line 412` with the browser never opening. This is a known Node.js/libuv bug on Windows: a race condition in console-title handling that can trigger when one Node process spawns another (the server spawning `runner/run.js`), and is more likely on locked-down VDI/RDP sessions. The runner is now spawned with `windowsHide: true` so it never creates its own console window, avoiding the console-title code path that hits the bug.
 - If this exact assertion still appears, it is an upstream Node.js issue rather than something in this tool's logic — check `node -v` on the machine and update to the latest Node.js LTS, since this libuv race condition was fixed upstream in later Node releases.
 - Spawn failures (e.g. `node` not found on PATH) are now also captured and shown in the Log instead of hanging silently.
+
+
+## v14.5 Updates
+- `Selector` now also accepts a few common Selenium-style locator prefixes, in addition to CSS and XPath:
+  - `id=value` — matches Playwright's built-in `id=` engine, used as-is.
+  - `name=value` — translated to `css=[name="value"]`.
+  - `link=value` — exact link-text lookup, translated to `a >> text="value"`.
+- New `Event`: `selectFrame`. `Selector` identifies the `<iframe>` element (CSS, XPath, `name=`, or `id=`); every action after it (fill/click/etc.) runs inside that iframe. Set `Selector` (or `Value`) to `top` / `default` / `main` / `parent` to switch back to the main page. The selected frame automatically resets on the next `goto`.
+  - Known limitation: `Highlight=Y` screenshots are drawn against the top page and won't currently box an element that's inside a selected iframe.
