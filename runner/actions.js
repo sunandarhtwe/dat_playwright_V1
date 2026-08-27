@@ -35,6 +35,8 @@ function resolveSelector(value) {
   return s;
 }
 
+const RESET_FRAME_KEYWORDS = ['top', 'default', 'main', 'parent', 'relative=top', 'relative=parent'];
+
 async function runAction(page, tc, context) {
   const event = normalize(tc.Event).toLowerCase();
   const selector = resolveSelector(tc.Selector);
@@ -42,29 +44,56 @@ async function runAction(page, tc, context) {
   const expectedText = normalize(tc.ExpectedText);
   const waitMs = Number(tc.WaitMs || 0);
   // Once a selectFrame action has run, subsequent element-based actions in this
-  // template (fill/click/etc.) operate inside that iframe instead of the top
-  // page, until selectFrame switches back to "top"/"default" or a new goto runs.
-  const target = (context && context.frameLocator) ? context.frameLocator : page;
+  // template (fill/click/etc.) operate inside that frame instead of the top
+  // page, until selectFrame switches back to "top"/"relative=top"/etc, or a new
+  // goto runs. context.frame (a real Playwright Frame, resolved by name) is
+  // preferred over context.frameLocator (a selector-based fallback) when both
+  // are available.
+  const target = (context && context.frame) ? context.frame
+    : (context && context.frameLocator) ? context.frameLocator
+    : page;
 
   switch (event) {
     case 'goto':
-      if (context) context.frameLocator = null; // top-level navigation invalidates any selected frame
+      if (context) { context.frame = null; context.frameLocator = null; } // top-level navigation invalidates any selected frame
       await page.goto(value || selector, { waitUntil: 'domcontentloaded', timeout: 120000 });
       break;
 
-    case 'selectframe':
-      // Selector identifies the <iframe> element (css/xpath/name=/id=). Value or
-      // Selector of "top" / "default" / "main" / "parent" switches back to the
-      // main page for all following actions.
+    case 'selectframe': {
+      // Selector identifies the <frame>/<iframe> element. "relative=top" /
+      // "relative=parent" (classic Selenium IDE selectFrame syntax) or the bare
+      // words top/default/main/parent, in either Selector or Value, switch back
+      // to the main page for all following actions.
       if (context) {
-        const target_ = (value || selector || '').toLowerCase();
-        if (!selector || ['top', 'default', 'main', 'parent'].includes(target_)) {
+        const rawSel = normalize(tc.Selector);
+        const check = [value, rawSel].map(s => s.toLowerCase());
+        if (!rawSel || check.some(s => RESET_FRAME_KEYWORDS.includes(s))) {
+          context.frame = null;
           context.frameLocator = null;
         } else {
-          context.frameLocator = page.frameLocator(selector);
+          // Prefer resolving by the frame's "name" attribute via Playwright's
+          // real Frame API (page.frame({name})) -- this is the reliable way to
+          // target a classic <frame> in an old frameset layout, which a plain
+          // selector-based FrameLocator isn't guaranteed to handle the same way
+          // as a modern <iframe>. Recognizes both the "name=value" shorthand and
+          // a raw [name="value"] / frame[name="value"] CSS attribute selector.
+          const nameEq = rawSel.match(/^name=(.+)$/i);
+          const attrName = rawSel.match(/\[\s*name\s*=\s*["']?([^"'\]]+)["']?\s*\]/i);
+          const name = nameEq ? nameEq[1].trim() : (attrName ? attrName[1].trim() : null);
+          const byName = name ? page.frame({ name }) : null;
+          if (byName) {
+            context.frame = byName;
+            context.frameLocator = null;
+          } else {
+            // No name given, or no frame with that name is attached yet --
+            // fall back to a selector-based FrameLocator (css/xpath/id=/etc.).
+            context.frame = null;
+            context.frameLocator = page.frameLocator(selector);
+          }
         }
       }
       break;
+    }
 
     case 'fill':
       await target.locator(selector).fill(value);
