@@ -1,0 +1,282 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Playwright Excel Test Runner v14</title>
+<style>
+:root{--blue:#1f4e78;--blue2:#173b5a;--bg:#f4f7fb;--card:#fff;--line:#d7dee8;--text:#1f2937;--muted:#64748b;--green:#0f766e;--warn:#f59e0b}
+*{box-sizing:border-box}
+body{font-family:Arial,"Meiryo",sans-serif;background:var(--bg);color:var(--text);margin:0;font-size:12px}
+.header{height:42px;background:linear-gradient(90deg,#173b5a,#1f4e78);color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:16px;margin:0;font-weight:600}.header .sub{font-size:11px;opacity:.85}
+.wrap{padding:10px 12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 3px rgba(15,23,42,.08);margin-bottom:8px;padding:10px}
+.top-grid{display:grid;grid-template-columns:190px 180px 1fr 170px;gap:10px;align-items:end}
+label{font-weight:bold;font-size:11px;color:#475569;display:block;margin-bottom:4px}
+input,select,button,textarea{font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid #cbd5e1;width:100%}
+select,button{height:28px}
+textarea{font-family:Consolas,monospace;resize:vertical;line-height:1.25;min-height:72px}
+button{background:var(--blue);color:#fff;border:0;cursor:pointer;white-space:nowrap}
+button:hover{background:var(--blue2)}button:disabled{background:#94a3b8;cursor:not-allowed}
+.primary{background:var(--green)}.primary:hover{background:#115e59}.warnbtn{background:var(--warn)}
+.smallbtn{width:auto;font-size:11px;padding:4px 8px;height:25px;margin-left:5px}
+.note{color:var(--muted);font-size:11px}.status{font-size:11px;color:#475569}
+.action-bar{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap;margin-top:7px}
+.action-bar button{width:auto;min-width:90px}
+.previewHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.tabs{display:flex;flex-wrap:wrap;gap:5px;margin:5px 0}
+.tab{width:auto;background:#e2e8f0;color:#1f2937;border:1px solid #cbd5e1;height:26px;padding:4px 8px}
+.tab.active{background:#1f4e78;color:#fff}
+.previewBox{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:auto;max-height:255px}
+table{border-collapse:collapse;width:100%;font-size:11px}
+th,td{border:1px solid #e5e7eb;padding:4px 5px;vertical-align:top}
+th{background:#1f4e78;color:#fff;position:sticky;top:0;z-index:1}
+td.editable{background:#fffef2;cursor:text}
+td.editable:focus{outline:2px solid #f59e0b;background:#fff7ed}
+.hidden{display:none}
+.mini{width:auto!important;height:21px!important;padding:1px 6px!important;font-size:10px!important;margin:1px}
+.cellSelect{width:100%!important;height:22px!important;padding:1px 3px!important;font-size:11px!important;border:1px solid #cbd5e1;border-radius:4px;background:#fffef2}
+.danger{background:#dc2626}
+.log-report-grid{display:grid;grid-template-columns:1fr;gap:8px}
+#log{white-space:pre-wrap;background:#0b1220;color:#d1fae5;border-radius:7px;padding:8px 10px;min-height:54px;max-height:92px;overflow:auto;font-size:11px;margin:0}
+.report-panel{padding:0}
+.report-head{padding:7px 10px;border-bottom:1px solid var(--line);font-weight:bold;display:flex;justify-content:space-between;align-items:center}
+iframe{width:100%;height:560px;border:0;border-radius:0 0 10px 10px;background:white}
+@media(max-width:1050px){.top-grid{grid-template-columns:1fr}.action-bar{justify-content:flex-start}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div><h1>Playwright Excel Test Runner v14</h1><div class="sub">Template / Browser / Variables → Generate → Execute → Report</div></div>
+  <div class="sub">DAT Integration Testing Tool</div>
+</div>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="top-grid">
+      <div>
+        <label>Template</label>
+        <select id="templateFolder"></select>
+      </div>
+      <div>
+        <label>Browser</label>
+        <select id="browserType">
+          <option value="chrome">Chrome</option>
+          <option value="msedge">Microsoft Edge</option>
+          <option value="edge-ie">Edge Mode IE</option>
+        </select>
+      </div>
+      <div>
+        <label>Variables</label>
+        <textarea id="variablesInput" rows="4" placeholder="# Login Information
+url=https://google.com
+UserID=test12345
+Password=12345678
+BranchCode=0001
+CustomerName=Yamada"></textarea>
+      </div>
+      <div>
+        <label>Action</label>
+        <button class="primary" onclick="generateTemplates()">Generate Test Case</button>
+      </div>
+    </div>
+
+    <div id="previewPanel" class="hidden" style="margin-top:8px">
+      <div class="previewHead">
+        <div><strong>Updated Template Preview</strong> <span class="note">No / TestCaseID မှလွဲပြီး edit လုပ်နိုင်ပါတယ်။ ＋/－ ဖြင့် row ထည့်/ဖျက်၊ ▲/▼ ဖြင့် row အစီအစဉ်ပြောင်းနိုင်ပါတယ်။ Selector မှာ CSS (#id) သို့မဟုတ် XPath (//button[...] or xpath=...) ကို လက်ခံပါတယ်။</span></div>
+        <span class="status" id="previewStatus">Generated</span>
+      </div>
+      <div id="templateTabs" class="tabs"></div>
+      <div id="previewGrid" class="previewBox"></div>
+      <div class="action-bar">
+        <button class="warnbtn" onclick="savePreviewChanges()">Save</button>
+        <button onclick="downloadGenerated()">Download Templates</button>
+        <button class="primary" onclick="executeGenerated()">Execute</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><strong>Log</strong><span id="statusText" class="note">Waiting</span></div>
+    <pre id="log">Waiting...</pre>
+  </div>
+
+  <div class="panel report-panel">
+    <div class="report-head">
+      <span>Report</span>
+      <div>
+        <button class="smallbtn primary" onclick="downloadResults()">テスト結果をダウンロードする</button>
+        <button class="smallbtn" onclick="reloadReport()">Reload Report</button>
+      </div>
+    </div>
+    <iframe id="reportFrame" src="about:blank"></iframe>
+  </div>
+</div>
+
+<script>
+let generatedId='', currentFolder='', latestResultRoot='', previewData=[], activeIndex=0;
+let generatedDirty=false;
+let shuttingDown=false;
+
+async function api(url,opt){const r=await fetch(url,opt);return await r.json();}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+async function loadFolders(){
+  const data=await api('/template-folders');
+  templateFolder.innerHTML='';
+  (data.folders||[]).forEach(f=>{const o=document.createElement('option');o.value=f;o.textContent=f;templateFolder.appendChild(o);});
+}
+
+async function generateTemplates(){
+  statusText.textContent='Generating';
+  log.textContent='Generating updated templates...\n';
+  reportFrame.src='about:blank';
+  const data=await api('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    folder:templateFolder.value,variablesText:variablesInput.value
+  })});
+  if(!data.ok){log.textContent+=data.log||'Generate failed';statusText.textContent='Generate failed';return;}
+  generatedId=data.generatedId; currentFolder=templateFolder.value; previewData=data.preview||[]; activeIndex=0; latestResultRoot=''; generatedDirty=false;
+  log.textContent+=data.log||'Generated.\n';
+  statusText.textContent='Generated';
+  previewPanel.classList.remove('hidden');
+  previewStatus.textContent='Generated ID: '+generatedId;
+  renderTabs(); renderPreview();
+}
+
+function renderTabs(){
+  templateTabs.innerHTML='';
+  previewData.forEach((t,i)=>{
+    const b=document.createElement('button');
+    b.className='tab'+(i===activeIndex?' active':'');
+    b.textContent=t.templateName+' ('+(t.rows?t.rows.length:0)+')';
+    b.onclick=()=>{activeIndex=i;renderTabs();renderPreview();};
+    templateTabs.appendChild(b);
+  });
+}
+
+function autoOrderRows(ti){
+  const t = previewData[ti];
+  if(!t || !Array.isArray(t.rows)) return;
+  let prefix = 'TC';
+  const first = (t.rows.find(r => r.TestCaseID) || {}).TestCaseID || '';
+  const m = String(first).match(/^(.*?)(\d+)$/);
+  if(m && m[1]) prefix = m[1];
+  t.rows.forEach((r, idx) => {
+    r.No = String(idx + 1);
+    r.TestCaseID = prefix + String(idx + 1).padStart(3, '0');
+  });
+}
+
+function renderPreview(){
+  const t=previewData[activeIndex];
+  if(!t){previewGrid.innerHTML='<div class="note" style="padding:10px">No preview data.</div>';return;}
+  autoOrderRows(activeIndex);
+  let html='<table><thead><tr><th>Action</th><th>No</th><th>TestCaseID</th><th>TestName</th><th>Event</th><th>Selector</th><th>InputKey</th><th>Value</th><th>ExpectedText</th><th>WaitMs</th><th>Screenshot</th><th>Enabled</th><th>StopOnFail</th><th>Memo</th><th>Highlight</th></tr></thead><tbody>';
+  const rowCount=(t.rows||[]).length;
+  (t.rows||[]).forEach((r,idx)=>{
+    html+=`<tr>
+      <td style="white-space:nowrap">
+        <button class="mini" onclick="insertRow(${activeIndex},${idx})">＋</button><button class="mini danger" onclick="removeRow(${activeIndex},${idx})">－</button>
+        <button class="mini" ${idx===0?'disabled':''} onclick="moveRow(${activeIndex},${idx},-1)" title="Move up">▲</button><button class="mini" ${idx===rowCount-1?'disabled':''} onclick="moveRow(${activeIndex},${idx},1)" title="Move down">▼</button>
+      </td>
+      <td>${esc(r.No)}</td><td>${esc(r.TestCaseID)}</td>
+      ${editableCell(activeIndex,idx,'TestName',r.TestName)}
+      ${eventSelectCell(activeIndex,idx,r.Event)}
+      ${editableCell(activeIndex,idx,'Selector',r.Selector)}
+      ${editableCell(activeIndex,idx,'InputKey',r.InputKey)}
+      ${editableCell(activeIndex,idx,'Value',r.Value)}
+      ${editableCell(activeIndex,idx,'ExpectedText',r.ExpectedText)}
+      ${editableCell(activeIndex,idx,'WaitMs',r.WaitMs)}
+      ${editableCell(activeIndex,idx,'Screenshot',r.Screenshot)}
+      ${editableCell(activeIndex,idx,'Enabled',r.Enabled)}
+      ${editableCell(activeIndex,idx,'StopOnFail',r.StopOnFail)}
+      ${editableCell(activeIndex,idx,'Memo',r.Memo)}
+      ${editableCell(activeIndex,idx,'Highlight',r.Highlight)}
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  previewGrid.innerHTML=html;
+}
+
+function editableCell(ti,ri,key,value){return `<td class="editable" contenteditable="true" oninput="updateCell(${ti},${ri},'${key}',this.innerText)">${esc(value)}</td>`;}
+function updateCell(ti,ri,key,val){previewData[ti].rows[ri][key]=val.replace(/\n/g,'').trim();generatedDirty=true;previewStatus.textContent='Edited - not saved yet';}
+
+const EVENT_OPTIONS=['goto','fill','type','click','waitForLoad','waitForSelector','waitForText','expectText','screenshot','wait','keyboardText','check'];
+function eventSelectCell(ti,ri,value){
+  let opts=EVENT_OPTIONS.slice();
+  const cur=String(value??'').trim();
+  // Keep an existing value that isn't in the fixed list (e.g. from a hand-edited
+  // Excel file) instead of silently discarding it when the dropdown renders.
+  if(cur && !opts.some(o=>o.toLowerCase()===cur.toLowerCase())) opts.unshift(cur);
+  const optionsHtml=opts.map(o=>`<option value="${esc(o)}"${cur.toLowerCase()===o.toLowerCase()?' selected':''}>${esc(o)}</option>`).join('');
+  return `<td><select class="cellSelect" onchange="updateCell(${ti},${ri},'Event',this.value)">${optionsHtml}</select></td>`;
+}
+
+function moveRow(ti,idx,dir){
+  const rows=previewData[ti].rows;
+  const target=idx+dir;
+  if(!rows||target<0||target>=rows.length) return;
+  const tmp=rows[idx];rows[idx]=rows[target];rows[target]=tmp;
+  autoOrderRows(ti);generatedDirty=true;previewStatus.textContent='Row moved - not saved yet';renderPreview();renderTabs();
+}
+function insertRow(ti,idx){
+  const rows=previewData[ti].rows, base=rows[idx]||{};
+  rows.splice(idx+1,0,{No:'',TestCaseID:'',TestName:'New Test Case',Event:'',Selector:'',InputKey:'',Value:'',ExpectedText:'',WaitMs:base.WaitMs||'',Screenshot:'Y',Enabled:'Y',StopOnFail:'',Memo:'',Highlight:''});
+  autoOrderRows(ti);generatedDirty=true;previewStatus.textContent='Row inserted - not saved yet';renderPreview();renderTabs();
+}
+function removeRow(ti,idx){
+  previewData[ti].rows.splice(idx,1);autoOrderRows(ti);generatedDirty=true;previewStatus.textContent='Row removed - not saved yet';renderPreview();renderTabs();
+}
+
+async function savePreviewChanges(){
+  if(!generatedId){alert('Generate Test Case ကို အရင်နှိပ်ပါ။');return false;}
+  const data=await api('/save-generated',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({generatedId,folder:currentFolder,templates:previewData})});
+  log.textContent+=data.log||'Saved.\n';if(data.ok) generatedDirty=false;previewStatus.textContent=data.ok?'Saved':'Save failed';return !!data.ok;
+}
+async function downloadGenerated(){
+  if(!generatedId){alert('Generate Test Case ကို အရင်နှိပ်ပါ။');return;}
+  const ok=await savePreviewChanges(); if(!ok) return;
+  window.location.href='/download-generated.zip?id='+encodeURIComponent(generatedId)+'&folder='+encodeURIComponent(currentFolder)+'&t='+Date.now();
+}
+async function executeGenerated(){
+  if(!generatedId){alert('Generate Test Case ကို အရင်နှိပ်ပါ။');return;}
+
+  if(generatedDirty){
+    previewStatus.textContent='Saving before execute...';
+    const ok = await savePreviewChanges();
+    if(!ok){
+      statusText.textContent='Save failed';
+      return;
+    }
+  }
+
+  statusText.textContent='Running';
+  log.textContent+='Executing generated templates...\n';
+  reportFrame.src='about:blank';
+  // generatedDirty is guaranteed false at this point: either nothing was edited,
+  // or the block above already saved the edits to disk. Either way Execute now
+  // runs directly against the already-correct files on disk instead of re-sending
+  // and re-writing the whole preview again on every click.
+  const data=await api('/execute-generated',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({generatedId,folder:currentFolder,browser:browserType.value,dirty:false})});
+  log.textContent+=data.log||'';
+  if(data.ok){latestResultRoot=data.resultRoot;statusText.textContent='Done';reloadReport();}
+  else{statusText.textContent='Failed';}
+}
+function reloadReport(){
+  if(latestResultRoot) reportFrame.src='/result-file?root='+encodeURIComponent(latestResultRoot)+'&file=html-report/index.html&t='+Date.now();
+  else reportFrame.src='/results/html-report/index.html?t='+Date.now();
+}
+function downloadResults(){
+  if(latestResultRoot) window.location.href='/download-results.zip?root='+encodeURIComponent(latestResultRoot)+'&t='+Date.now();
+  else window.location.href='/download-results.zip?t='+Date.now();
+}
+function shutdownServer(){
+  if(shuttingDown) return; shuttingDown=true;
+  const payload=JSON.stringify({generatedId, resultRoot:latestResultRoot});
+  try{navigator.sendBeacon('/shutdown', new Blob([payload],{type:'application/json'}));}catch(e){}
+}
+window.addEventListener('pagehide', shutdownServer);
+loadFolders();
+</script>
+</body>
+</html>

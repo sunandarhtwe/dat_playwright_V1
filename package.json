@@ -1,0 +1,17 @@
+{
+  "name": "playwright-excel-evidence-framework-v14-4",
+  "version": "14.4.0",
+  "description": "Excel-template driven Playwright framework with screenshot evidence, Excel results, duration, and HTML dashboard.",
+  "type": "commonjs",
+  "scripts": {
+    "test:template": "node runner/run.js --template",
+    "test:folder": "node runner/run.js --folder",
+    "test:all": "node runner/run.js --folder data/templates",
+    "show:report": "node -e \"console.log('Open results/html-report/index.html')\"",
+    "ui": "node runner/server.js"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.55.0",
+    "exceljs": "^4.4.0"
+  }
+}

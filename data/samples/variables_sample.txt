@@ -1,0 +1,9 @@
+# Login Information
+url=https://google.com
+UserID=test12345
+Password=12345678
+
+# Customer Data
+BranchCode=0001
+CustomerName=Yamada
+AccountNo=123456789
