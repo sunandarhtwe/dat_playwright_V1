@@ -37,6 +37,19 @@ function resolveSelector(value) {
 
 const RESET_FRAME_KEYWORDS = ['top', 'default', 'main', 'parent', 'relative=top', 'relative=parent'];
 
+// Polls page.frame({name}) for a short window instead of checking once, since a
+// frame can attach to the page tree a moment after navigation/load -- a single
+// synchronous check right after goto/waitForLoad can miss it.
+async function waitForFrameByName(page, name, timeoutMs) {
+  const start = Date.now();
+  let fr = page.frame({ name });
+  while (!fr && Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, 200));
+    fr = page.frame({ name });
+  }
+  return fr;
+}
+
 async function runAction(page, tc, context) {
   const event = normalize(tc.Event).toLowerCase();
   const selector = resolveSelector(tc.Selector);
@@ -80,15 +93,30 @@ async function runAction(page, tc, context) {
           const nameEq = rawSel.match(/^name=(.+)$/i);
           const attrName = rawSel.match(/\[\s*name\s*=\s*["']?([^"'\]]+)["']?\s*\]/i);
           const name = nameEq ? nameEq[1].trim() : (attrName ? attrName[1].trim() : null);
-          const byName = name ? page.frame({ name }) : null;
-          if (byName) {
-            context.frame = byName;
-            context.frameLocator = null;
+
+          if (name) {
+            const byName = await waitForFrameByName(page, name, waitMs || 10000);
+            if (byName) {
+              context.frame = byName;
+              context.frameLocator = null;
+            } else {
+              // Fail here, immediately and specifically, instead of silently
+              // falling through -- a later click/fill timing out with a generic
+              // "not visible" error gives no clue that the frame itself was
+              // never found. List actual frame names to catch typos/timing at a
+              // glance.
+              const available = page.frames().map(f => f.name() || '(unnamed)').join(', ');
+              throw new Error(`selectFrame: no frame with name="${name}" found within ${waitMs || 10000}ms. Frames currently on the page: ${available || '(none)'}`);
+            }
           } else {
-            // No name given, or no frame with that name is attached yet --
-            // fall back to a selector-based FrameLocator (css/xpath/id=/etc.).
             context.frame = null;
             context.frameLocator = page.frameLocator(selector);
+            // FrameLocator itself is lazy and never errors on creation, so
+            // explicitly confirm the underlying <frame>/<iframe> element exists
+            // before moving on -- same reasoning as above.
+            await context.frameLocator.owner().waitFor({ timeout: waitMs || 10000 }).catch(() => {
+              throw new Error(`selectFrame: no frame/iframe element matched selector "${selector}".`);
+            });
           }
         }
       }
