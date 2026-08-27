@@ -160,6 +160,9 @@ async function runTemplate(templatePath) {
 
   const browser = await launchSelectedBrowser();
   const page = await browser.newPage();
+  // Reused across every row in this template so a `selectFrame` action's target
+  // frame stays selected for subsequent rows, instead of resetting each case.
+  const context = { templateName };
 
   for (let i = 0; i < cases.length; i++) {
     const tc = cases[i];
@@ -180,14 +183,14 @@ async function runTemplate(templatePath) {
           await page.screenshot({ path: screenshotPath, fullPage: true });
         }
       }
-      await runAction(page, tc, { templateName });
+      await runAction(page, tc, context);
       if ((highlightFlag !== 'Y' && highlightFlag !== 'YES') &&
         (screenshotFlag === 'Y' || screenshotFlag === 'YES' || normalize(tc.Event).toLowerCase() === 'screenshot')) {
         screenshotPath = path.join(screenshotDir, `${testCaseId}.png`);
         await page.screenshot({ path: screenshotPath, fullPage: true });
       }
       /*
-      await runAction(page, tc, { templateName });
+      await runAction(page, tc, context);
 
       if (highlightFlag === 'Y' || highlightFlag === 'YES') {
         await addHighlight(page, resolveSelector(tc.Selector));
