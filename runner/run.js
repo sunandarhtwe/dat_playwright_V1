@@ -73,79 +73,39 @@ async function clearHighlight(page) {
   }).catch(() => {});
 }
 
+// Uses Playwright's own locator engine end-to-end (via boundingBox()) instead of
+// re-resolving the selector with a hand-rolled document.querySelector/xpath
+// script inside the page. That old approach broke for anything beyond plain CSS
+// or xpath= (e.g. id=, name=, link=, or any ">> " chained selector) since those
+// aren't valid native DOM APIs -- Playwright's own engine already understands
+// all of them correctly.
 async function addHighlight(page, selector) {
- if (!selector) return;
- await page.locator(selector).first().waitFor({ state: 'visible', timeout: 10000 });
- await page.locator(selector).first().scrollIntoViewIfNeeded();
- await page.evaluate((sel) => {
-   const old = document.getElementById('__pw_red_highlight_box__');
-   if (old) old.remove();
-   let el = null;
-   if (sel.startsWith('xpath=')) {
-     el = document.evaluate(
-       sel.replace(/^xpath=/, ''),
-       document,
-       null,
-       XPathResult.FIRST_ORDERED_NODE_TYPE,
-       null
-     ).singleNodeValue;
-   } else {
-     el = document.querySelector(sel);
-   }
-   if (!el) return;
-   const rect = el.getBoundingClientRect();
-   const pad = 6;
-   const box = document.createElement('div');
-box.id = '__pw_red_highlight_box__';
-   box.style.position = 'absolute';
-   box.style.left = `${window.scrollX + rect.left - pad}px`;
-   box.style.top = `${window.scrollY + rect.top - pad}px`;
-   box.style.width = `${rect.width + pad * 3}px`;
-   box.style.height = `${rect.height + pad * 2}px`;
-   box.style.border = '4px solid red';
-   box.style.borderRadius = '4px';
-   box.style.boxSizing = 'border-box';
-   box.style.pointerEvents = 'none';
-   box.style.zIndex = '2147483647';
-   box.style.background = 'transparent';
-   document.body.appendChild(box);
- }, selector);
-}
-
-/*async function addHighlight(page, selector) {
   if (!selector) return;
-  await page.locator(selector).first().waitFor({ state: 'visible', timeout: 10000 });
-  await page.locator(selector).first().scrollIntoViewIfNeeded();
-  await page.evaluate((sel) => {
+  const loc = page.locator(selector).first();
+  await loc.waitFor({ state: 'visible', timeout: 10000 });
+  await loc.scrollIntoViewIfNeeded();
+  const box = await loc.boundingBox();
+  if (!box) return;
+  await page.evaluate((b) => {
     const old = document.getElementById('__pw_red_highlight_box__');
     if (old) old.remove();
-
-    let el = null;
-    if (sel.startsWith('xpath=')) {
-      el = document.evaluate(sel.replace(/^xpath=/, ''), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-    } else {
-      el = document.querySelector(sel);
-    }
-    if (!el) return;
-
-    const rect = el.getBoundingClientRect();
-    const pad = 5;
-    const box = document.createElement('div');
-    box.id = '__pw_red_highlight_box__';
-    box.style.position = 'fixed';
-    box.style.left = `${rect.left - pad}px`;
-    box.style.top = `${rect.top - pad}px`;
-    box.style.width = `${rect.width + pad * 2}px`;
-    box.style.height = `${rect.height + pad * 2}px`;
-    box.style.border = '3px solid red';
-    box.style.borderRadius = '4px';
-    box.style.boxSizing = 'border-box';
-    box.style.pointerEvents = 'none';
-    box.style.zIndex = '2147483647';
-    box.style.background = 'transparent';
-    document.body.appendChild(box);
-  }, selector);
-} */
+    const pad = 6;
+    const el = document.createElement('div');
+    el.id = '__pw_red_highlight_box__';
+    el.style.position = 'absolute';
+    el.style.left = `${window.scrollX + b.x - pad}px`;
+    el.style.top = `${window.scrollY + b.y - pad}px`;
+    el.style.width = `${b.width + pad * 3}px`;
+    el.style.height = `${b.height + pad * 2}px`;
+    el.style.border = '4px solid red';
+    el.style.borderRadius = '4px';
+    el.style.boxSizing = 'border-box';
+    el.style.pointerEvents = 'none';
+    el.style.zIndex = '2147483647';
+    el.style.background = 'transparent';
+    document.body.appendChild(el);
+  }, box);
+}
 
 async function runTemplate(templatePath) {
   const templateName = sanitizeName(path.basename(templatePath, path.extname(templatePath)));
